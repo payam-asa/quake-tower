@@ -1,6 +1,8 @@
 import { LEVELS } from './levels.js';
 import { loadProgress } from './progress.js';
-import { W, FONT, FONT_BOLD, makeButton, drawStars } from './ui.js';
+import { W, FONT, FONT_BOLD, makeButton, makeMuteButton, drawStars } from './ui.js';
+import { drawBackdrop, driftClouds, drawGround } from './art.js';
+import { GROUNDS } from './physics.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -9,6 +11,9 @@ export class MenuScene extends Phaser.Scene {
 
   create(data = {}) {
     const progress = loadProgress();
+    this.backdrop = drawBackdrop(this, 690);
+    drawGround(this.add.graphics(), 'soft', GROUNDS.soft.color, 690, 0);
+    makeMuteButton(this, W - 44, 36);
     this.add.text(W / 2, 60, 'Quake Tower', {
       fontFamily: FONT_BOLD, fontSize: '44px', color: '#1d3557',
     }).setOrigin(0.5);
@@ -37,12 +42,16 @@ export class MenuScene extends Phaser.Scene {
     g.setDepth(10);
 
     if (data.message) {
-      this.add.text(W / 2, 720, data.message, {
-        fontFamily: FONT_BOLD, fontSize: '22px', color: '#2a9d8f', align: 'center',
+      this.add.text(W / 2, 735, data.message, {
+        fontFamily: FONT_BOLD, fontSize: '22px', color: '#ffffff', align: 'center', stroke: '#1d3557', strokeThickness: 4,
       }).setOrigin(0.5);
     }
     this.add.text(W / 2, 770, 'Progress is saved in this browser only', {
-      fontFamily: FONT, fontSize: '14px', color: '#457b9d',
+      fontFamily: FONT, fontSize: '14px', color: '#f1e3c8',
     }).setOrigin(0.5);
+  }
+
+  update(_t, deltaMs) {
+    driftClouds(this.backdrop.clouds, deltaMs / 1000);
   }
 }

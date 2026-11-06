@@ -1,7 +1,10 @@
-import { Shake, starsFor, messageFor, towerPeriod, DT } from './physics.js';
+import { Shake, starsFor, messageFor, towerPeriod, envelope, DT } from './physics.js';
 import { LEVELS, hintDirection, hintText } from './levels.js';
 import { loadProgress, recordResult } from './progress.js';
-import { W, INK, STAR_ON, FONT, FONT_BOLD, makeButton, drawStars, starPoints } from './ui.js';
+import { W, INK, STAR_ON, FONT, FONT_BOLD, makeButton, makeMuteButton, drawStars, starPoints } from './ui.js';
+import { drawBackdrop, driftClouds, drawGround, drawTower } from './art.js';
+import { unlockAudio, startRumble, setRumble, stopRumble, playResult } from './sound.js';
+import { showScienceCard } from './sciencecard.js';
 
 const GROUND_Y = 600;          // top of the ground layer
 const TOWER_TOP_LIMIT = 290;   // tallest tower reaches this y
@@ -17,7 +20,6 @@ const METER_TOP = 300;
 const METER_BOT = 590;
 const METER_MAX_R = 8;
 
-const FLOOR_COLORS = [0xf26b5b, 0xf7b538, 0x4fb3bf, 0x7bc96f, 0xa58ad9];
 const ZONES = [ // [from R, to R, colour, stars]
   [0, 2, 0x52b788, 3],
   [2, 4, 0xf4d35e, 2],
@@ -43,16 +45,16 @@ export class GameScene extends Phaser.Scene {
     this.tries = 0;
     this.peakR = 0;
 
-    this.sky = this.add.graphics();
+    this.backdrop = drawBackdrop(this, GROUND_Y);
     this.groundG = this.add.graphics();
     this.towerG = this.add.graphics();
     this.meterG = this.add.graphics();
     this.starG = this.add.graphics().setDepth(5);
-    this.drawSky();
 
     // Header
-    makeButton(this, 44, 36, 64, 44, '☰', 0x8d99ae, () => this.scene.start('menu'), 24);
-    this.add.text(W / 2 + 20, 20, `Level ${L.number}: ${L.groundInfo.name}`, {
+    makeButton(this, 44, 36, 64, 44, '☰', 0x8d99ae, () => { stopRumble(); this.scene.start('menu'); }, 24);
+    makeMuteButton(this, W - 44, 36);
+    this.add.text(W / 2, 20, `Level ${L.number}: ${L.groundInfo.name}`, {
       fontFamily: FONT_BOLD, fontSize: '26px', color: '#1d3557',
     }).setOrigin(0.5, 0);
     this.add.text(W / 2, 64, `Goal: ${L.goal}`, {
@@ -76,8 +78,10 @@ export class GameScene extends Phaser.Scene {
     this.plusBtn = makeButton(this, 160, 690, 80, 64, '+', 0x457b9d, () => this.changeFloors(1));
     this.shakeBtn = makeButton(this, 345, 690, 190, 64, 'Shake!', 0xe63946, () => this.startShake());
     // Result controls
-    this.retryBtn = makeButton(this, 130, 690, 180, 64, 'Retry', 0x457b9d, () => this.retry());
-    this.nextBtn = makeButton(this, 350, 690, 180, 64, 'Next', 0x2a9d8f, () => this.next());
+    this.retryBtn = makeButton(this, 92, 690, 150, 64, 'Retry', 0x457b9d, () => this.retry());
+    this.whyBtn = makeButton(this, 240, 690, 120, 64, 'Why?', 0xf4a261, () => this.openScience(), 26);
+    this.nextBtn = makeButton(this, 388, 690, 150, 64, 'Next', 0x2a9d8f, () => this.next());
+    this.events.once('shutdown', () => stopRumble());
 
     this.add.text(W / 2, 770, 'A tower sways most when its rhythm matches the ground', {
       fontFamily: FONT, fontSize: '14px', color: '#e8d7c3',
@@ -95,7 +99,7 @@ export class GameScene extends Phaser.Scene {
     const build = state === 'build';
     const result = state === 'result';
     for (const b of [this.minusBtn, this.plusBtn, this.shakeBtn]) b.setVisible(build);
-    for (const b of [this.retryBtn, this.nextBtn]) b.setVisible(result);
+    for (const b of [this.retryBtn, this.whyBtn, this.nextBtn]) b.setVisible(result);
     if (build) {
       this.minusBtn.setEnabled(this.floors > this.level.minFloors);
       this.plusBtn.setEnabled(this.floors < this.level.maxFloors);
@@ -136,11 +140,16 @@ export class GameScene extends Phaser.Scene {
     this.accum = 0;
     this.peakR = 0;
     this.setState('shaking');
+    unlockAudio();
+    startRumble();
     if (navigator.vibrate) navigator.vibrate(Array(12).fill([250, 250]).flat());
   }
 
   finishShake() {
+    stopRumble();
     const stars = starsFor(this.shake.swayRatio);
+    this.lastR = this.shake.swayRatio;
+    playResult(stars);
     const canNext = stars >= 1 || this.tries >= 3;
     recordResult(loadProgress(), this.level.number, stars, canNext);
 
@@ -154,6 +163,14 @@ export class GameScene extends Phaser.Scene {
     }
     this.nextBtn.setEnabled(canNext);
     this.nextBtn.label.setText(this.levelIndex === LEVELS.length - 1 ? 'Done' : 'Next');
+  }
+
+  openScience() {
+    if (this.card) return;
+    this.card = showScienceCard(this, {
+      level: this.level, floors: this.floors, R: this.lastR,
+      onClose: () => { this.card = null; },
+    });
   }
 
   retry() {
@@ -175,6 +192,7 @@ export class GameScene extends Phaser.Scene {
   // ---------- loop ----------
 
   update(_time, deltaMs) {
+    driftClouds(this.backdrop.clouds, deltaMs / 1000);
     if (this.state !== 'shaking' || !this.shake) return;
     // Fixed-step substeps; cap the frame delta so a hidden tab doesn't jump.
     this.accum += Math.min(deltaMs / 1000, 0.1);
@@ -183,6 +201,8 @@ export class GameScene extends Phaser.Scene {
       this.accum -= DT;
     }
     this.peakR = this.shake.swayRatio;
+    const swayNow = Math.abs(this.shake.u) * this.shake.omega ** 2 / this.shake.A;
+    setRumble(envelope(this.shake.t), Math.min(1, swayNow / 8));
     this.redraw();
     if (this.shake.done) {
       this.finishShake();
@@ -191,14 +211,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- drawing ----------
-
-  drawSky() {
-    const g = this.sky;
-    g.fillStyle(0xbfe3f5, 1).fillRect(0, 0, W, GROUND_Y);
-    g.fillStyle(0xffffff, 0.8);
-    g.fillCircle(70, 330, 22).fillCircle(95, 322, 28).fillCircle(122, 332, 20);
-    g.fillCircle(300, 230, 18).fillCircle(322, 222, 24).fillCircle(345, 232, 17);
-  }
 
   redraw() {
     const s = this.shake;
@@ -218,15 +230,7 @@ export class GameScene extends Phaser.Scene {
   drawGround(gx, intensity, t) {
     const gg = this.groundG;
     gg.clear();
-    const base = this.level.groundInfo.color;
-    const c = Phaser.Display.Color.ValueToColor(base);
-    gg.fillStyle(c.clone().lighten(10).color, 1).fillRect(-20 + gx, GROUND_Y, W + 40, 50);
-    gg.fillStyle(base, 1).fillRect(-20 + gx, GROUND_Y + 50, W + 40, 80);
-    gg.fillStyle(c.clone().darken(20).color, 1).fillRect(-20 + gx, GROUND_Y + 130, W + 40, 80);
-    gg.fillStyle(c.clone().darken(30).color, 1);
-    for (let i = 0; i < 14; i++) {
-      gg.fillCircle(((i * 73) % (W + 40)) - 10 + gx, GROUND_Y + 20 + ((i * 37) % 160), 4);
-    }
+    drawGround(gg, this.level.ground, this.level.groundInfo.color, GROUND_Y, gx);
     if (intensity > 0.3) {
       gg.fillStyle(0xe9d8b4, 0.45 * intensity);
       for (let i = 0; i < 6; i++) {
@@ -237,36 +241,12 @@ export class GameScene extends Phaser.Scene {
 
   drawTower(gx, topSway, t, R) {
     const N = this.floors;
-    const fh = this.floorH;
-    const tg = this.towerG;
-    tg.clear();
     const cx = W / 2 - 20 + gx;
-    const offset = (i) => cx + topSway * (i / N);
-    const hw = TOWER_W / 2;
-    const rattle = R > 3;
-    const winH = Math.max(4, Math.round(fh * 0.45));
-
-    for (let i = 0; i < N; i++) {
-      const yBot = GROUND_Y - i * fh;
-      const yTop = yBot - fh;
-      const xb = offset(i);
-      const xt = offset(i + 1);
-      const pts = [
-        { x: xb - hw, y: yBot }, { x: xb + hw, y: yBot },
-        { x: xt + hw, y: yTop }, { x: xt - hw, y: yTop },
-      ];
-      tg.fillStyle(FLOOR_COLORS[i % FLOOR_COLORS.length], 1).fillPoints(pts, true);
-      tg.lineStyle(2, INK, 0.5).strokePoints(pts, true);
-      const xm = (xb + xt) / 2;
-      const dx = rattle ? Math.sin(t * 60 + i) * 1.5 : 0;
-      tg.fillStyle(0xfdf6e3, 1);
-      for (const wx of [-32, 0, 32]) {
-        tg.fillRect(xm + wx - 9 + dx, yTop + (fh - winH) / 2, 18, winH);
-      }
-    }
-    const xr = offset(N);
-    const yr = GROUND_Y - N * fh;
-    tg.fillStyle(INK, 1).fillRect(xr - hw - 6, yr - 8, TOWER_W + 12, 8);
+    this.towerG.clear();
+    drawTower(this.towerG, {
+      N, floorH: this.floorH, width: TOWER_W, groundY: GROUND_Y,
+      offset: (i) => cx + topSway * (i / N), t, rattle: R > 3,
+    });
   }
 
   drawMeter(R, peakR) {

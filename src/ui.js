@@ -1,3 +1,5 @@
+import { unlockAudio, playClick, isMuted, setMuted } from './sound.js';
+
 // Shared drawing helpers for the Phaser scenes.
 export const W = 480;
 export const H = 800;
@@ -25,7 +27,7 @@ export function makeButton(scene, x, y, w, h, label, color, onClick, fontSize = 
   c.setInteractive({ useHandCursor: true });
   c.enabled = true;
   const dark = Phaser.Display.Color.ValueToColor(color).darken(15).color;
-  c.on('pointerdown', () => { if (c.enabled) draw(dark); });
+  c.on('pointerdown', () => { unlockAudio(); if (c.enabled) { draw(dark); playClick(); } });
   c.on('pointerout', () => draw(color));
   c.on('pointerup', () => { draw(color); if (c.enabled && c.visible) onClick(); });
   c.setEnabled = (on) => { c.enabled = on; c.setAlpha(on ? 1 : 0.4); return c; };
@@ -50,4 +52,31 @@ export function drawStars(g, x, y, n, size = 24, total = 3, gap = size * 2.3) {
     g.fillStyle(k < n ? STAR_ON : STAR_OFF, 1).fillPoints(pts, true);
     g.lineStyle(Math.max(2, size / 8), INK, 1).strokePoints(pts, true);
   }
+}
+
+/** Small speaker toggle; the choice is remembered in this browser. */
+export function makeMuteButton(scene, x, y) {
+  const btn = makeButton(scene, x, y, 64, 44, '', 0x8d99ae, () => {
+    setMuted(!isMuted());
+    paint();
+  }, 18);
+  const icon = scene.add.graphics();
+  btn.add(icon);
+  const paint = () => {
+    icon.clear();
+    icon.fillStyle(0xffffff, 1);
+    icon.fillRect(-14, -5, 7, 10);
+    icon.fillTriangle(-8, -5, 2, -13, 2, 13);
+    icon.fillTriangle(-8, 5, 2, -13, 2, 13);
+    icon.lineStyle(3, 0xffffff, 1);
+    if (isMuted()) {
+      icon.lineBetween(7, -7, 17, 7);
+      icon.lineBetween(17, -7, 7, 7);
+    } else {
+      icon.beginPath(); icon.arc(4, 0, 8, -0.8, 0.8); icon.strokePath();
+      icon.beginPath(); icon.arc(4, 0, 14, -0.8, 0.8); icon.strokePath();
+    }
+  };
+  paint();
+  return btn;
 }
