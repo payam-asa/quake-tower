@@ -6,7 +6,7 @@ export function loadProgress() {
     const p = JSON.parse(localStorage.getItem(KEY));
     if (p && Array.isArray(p.best)) return p;
   } catch (_) { /* storage blocked or empty */ }
-  return { best: [], unlocked: 1 };
+  return { best: [], unlocked: 1, tallest: 0 };
 }
 
 export function saveProgress(p) {
@@ -20,4 +20,12 @@ export function recordResult(p, levelNumber, stars, unlockNext) {
   if (unlockNext) p.unlocked = Math.max(p.unlocked, levelNumber + 1);
   saveProgress(p);
   return p;
+}
+
+/** Free-build record: tallest tower that earned 3 stars. Returns true if it is a new best. */
+export function recordTallest(p, floors) {
+  if (floors <= (p.tallest ?? 0)) return false;
+  p.tallest = floors;
+  saveProgress(p);
+  return true;
 }

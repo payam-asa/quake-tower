@@ -98,8 +98,10 @@ const FLOOR_COLORS = [0xf26b5b, 0xf7b538, 0x4fb3bf, 0x7bc96f, 0xa58ad9];
  * Tower with N floors. offset(i) gives the centre x of level line i (0 = ground).
  * Floor 0 gets a door; the roof gets a water tank and an antenna.
  */
-export function drawTower(g, { N, floorH, width, groundY, offset, t = 0, rattle = false }) {
+export function drawTower(g, { N, floorH, width, groundY, offset, t = 0, rattle = false, damper = false }) {
   const hw = width / 2;
+  const ws = width * 0.29; // window spacing
+  const ww = Math.min(18, width * 0.17);
   const winH = Math.max(4, Math.round(floorH * 0.45));
   for (let i = 0; i < N; i++) {
     const yBot = groundY - i * floorH;
@@ -125,19 +127,29 @@ export function drawTower(g, { N, floorH, width, groundY, offset, t = 0, rattle 
       const dh = Math.max(8, floorH - 6);
       g.fillStyle(0x6d4c41, 1).fillRoundedRect(xm - 9, yBot - dh, 18, dh, { tl: 6, tr: 6, bl: 0, br: 0 });
       g.fillStyle(0xffd166, 1).fillCircle(xm + 5, yBot - dh / 2, 1.6);
-      for (const wx of [-32, 32]) drawWindow(g, xm + wx - 9 + dx, wy, 18, winH);
+      for (const wx of [-ws, ws]) drawWindow(g, xm + wx - ww / 2 + dx, wy, ww, winH);
     } else {
-      for (const wx of [-32, 0, 32]) drawWindow(g, xm + wx - 9 + dx, wy, 18, winH);
+      for (const wx of [-ws, 0, ws]) drawWindow(g, xm + wx - ww / 2 + dx, wy, ww, winH);
     }
   }
   // Roof, water tank and antenna
   const xr = offset(N);
   const yr = groundY - N * floorH;
+  if (damper) {
+    // A heavy pendulum hung from the roof; it lags behind the tower's sway.
+    const lean = offset(N) - offset(N - 1);
+    const len = Math.max(floorH * 1.6, 20);
+    const bx = xr - lean * 3;
+    const by = yr + len;
+    g.lineStyle(3, INK, 1).lineBetween(xr, yr, bx, by);
+    g.fillStyle(0x495057, 1).fillCircle(bx, by, Math.max(6, floorH * 0.38));
+    g.lineStyle(2, 0xffd166, 1).strokeCircle(bx, by, Math.max(6, floorH * 0.38));
+  }
   g.fillStyle(INK, 1).fillRect(xr - hw - 6, yr - 8, width + 12, 8);
-  g.fillStyle(0x8d99ae, 1).fillRect(xr - hw + 10, yr - 22, 22, 14);
-  g.fillStyle(0x6c7a89, 1).fillRect(xr - hw + 8, yr - 25, 26, 4);
-  g.lineStyle(2, INK, 1).lineBetween(xr + hw - 20, yr - 8, xr + hw - 20 + (offset(N) - offset(N - 1)) * 2, yr - 34);
-  g.fillStyle(0xe63946, 1).fillCircle(xr + hw - 20 + (offset(N) - offset(N - 1)) * 2, yr - 35, 3);
+  g.fillStyle(0x8d99ae, 1).fillRect(xr - hw + 8, yr - 22, Math.min(22, width * 0.2), 14);
+  g.fillStyle(0x6c7a89, 1).fillRect(xr - hw + 6, yr - 25, Math.min(26, width * 0.24), 4);
+  g.lineStyle(2, INK, 1).lineBetween(xr + hw - 14, yr - 8, xr + hw - 14 + (offset(N) - offset(N - 1)) * 2, yr - 34);
+  g.fillStyle(0xe63946, 1).fillCircle(xr + hw - 14 + (offset(N) - offset(N - 1)) * 2, yr - 35, 3);
 }
 
 function drawWindow(g, x, y, w, h) {

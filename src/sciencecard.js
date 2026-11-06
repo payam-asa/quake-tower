@@ -6,9 +6,9 @@ import { W, H, INK, FONT, FONT_BOLD, makeButton } from './ui.js';
 const PANEL_W = 440;
 const PANEL_H = 690;
 
-export function showScienceCard(scene, { level, floors, R, onClose }) {
+export function showScienceCard(scene, { ground, floors, R, zeta = DEFAULT_ZETA, onClose }) {
   const Tb = towerPeriod(floors);
-  const Tg = level.groundInfo.period;
+  const Tg = ground.period;
   const r = Tb / Tg;
 
   const c = scene.add.container(0, 0).setDepth(100);
@@ -38,7 +38,7 @@ export function showScienceCard(scene, { level, floors, R, onClose }) {
   let y = py + 78;
   text(px + 24, y, 'One swing takes:', { fontStyle: 'bold' });
   y += 32;
-  for (const [label, T, col] of [['Your tower', Tb, 0xf26b5b], ['The ground', Tg, level.groundInfo.color]]) {
+  for (const [label, T, col] of [['Your tower', Tb, 0xf26b5b], ['The ground', Tg, ground.color]]) {
     text(px + 24, y, label);
     g.fillStyle(col, 1).fillRoundedRect(barX, y + 2, Math.max(6, T * scale), 18, 6);
     g.lineStyle(2, INK, 0.6).strokeRoundedRect(barX, y + 2, Math.max(6, T * scale), 18, 6);
@@ -68,13 +68,13 @@ export function showScienceCard(scene, { level, floors, R, onClose }) {
   g.beginPath();
   for (let i = 0; i <= 150; i++) {
     const rr = (i / 150) * rMax;
-    const p = [X(rr), Y(daf(rr, DEFAULT_ZETA))];
+    const p = [X(rr), Y(daf(rr, zeta))];
     if (i === 0) g.moveTo(...p); else g.lineTo(...p);
   }
   g.strokePath();
 
   const mx = X(Math.min(r, rMax));
-  const my = Y(daf(r, DEFAULT_ZETA));
+  const my = Y(daf(r, zeta));
   g.fillStyle(INK, 1).fillCircle(mx, my, 8);
   g.fillStyle(0xffc93c, 1).fillCircle(mx, my, 5);
   const lbl = text(mx + (r > 2 ? -12 : 12), my - 26, 'your tower', { fontSize: '14px', fontStyle: 'bold' });
@@ -83,7 +83,8 @@ export function showScienceCard(scene, { level, floors, R, onClose }) {
   y = gy0 + 50;
   text(px + 24, y, explainRatio(r), { wordWrap: { width: PANEL_W - 48 } });
   y += 74;
-  text(px + 24, y, `This shake: sway ratio ${R.toFixed(1)}`, { fontSize: '15px', color: '#457b9d' });
+  const extra = zeta > DEFAULT_ZETA ? ' · damper on (flatter curve)' : '';
+  text(px + 24, y, `This shake: sway ratio ${R.toFixed(1)}${extra}`, { fontSize: '15px', color: '#457b9d' });
   y += 26;
   text(px + 24, y, LIMITS_NOTE, { fontSize: '13px', color: '#5c677d', wordWrap: { width: PANEL_W - 48 } });
 

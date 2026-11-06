@@ -2,7 +2,8 @@ import { MenuScene } from './menu.js';
 import { GameScene } from './game.js';
 
 // Phaser is loaded globally from the CDN script tag in index.html.
-new Phaser.Game({
+// window.quakeTower lets browser tests wait for game states.
+window.quakeTower = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#bfe3f5',

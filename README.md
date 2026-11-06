@@ -5,6 +5,7 @@ A tap-and-shake browser game about resonance: a tower sways most when its period
 **Milestone 1:** physics module and one level.
 **Milestone 2:** levels 1–5, level menu with saved stars, retry, hints, sway meter.
 **Milestone 3:** synthesised sounds with mute, science card, flat-colour art, GitHub Pages deploy.
+**Levels 6–10:** choose-your-ground hospital, damper, three-tower street, mystery ground with a probe, free build with a saved record.
 
 ## Run locally
 
