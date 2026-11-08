@@ -6,7 +6,7 @@ import { W, H, INK, FONT, FONT_BOLD, makeButton } from './ui.js';
 const PANEL_W = 440;
 const PANEL_H = 690;
 
-export function showScienceCard(scene, { ground, floors, R, zeta = DEFAULT_ZETA, onClose }) {
+export function showScienceCard(scene, { ground, floors, R, zeta = DEFAULT_ZETA, collapsed = false, onClose }) {
   const Tb = towerPeriod(floors);
   const Tg = ground.period;
   const r = Tb / Tg;
@@ -84,7 +84,10 @@ export function showScienceCard(scene, { ground, floors, R, zeta = DEFAULT_ZETA,
   text(px + 24, y, explainRatio(r), { wordWrap: { width: PANEL_W - 48 } });
   y += 74;
   const extra = zeta > DEFAULT_ZETA ? ' · damper on (flatter curve)' : '';
-  text(px + 24, y, `This shake: sway ratio ${R.toFixed(1)}${extra}`, { fontSize: '15px', color: '#457b9d' });
+  const shakeLine = collapsed
+    ? `This shake: the sway ratio passed 6 and the tower collapsed${extra}`
+    : `This shake: sway ratio ${R.toFixed(1)}${extra}`;
+  text(px + 24, y, shakeLine, { fontSize: '15px', color: '#457b9d' });
   y += 26;
   text(px + 24, y, LIMITS_NOTE, { fontSize: '13px', color: '#5c677d', wordWrap: { width: PANEL_W - 48 } });
 

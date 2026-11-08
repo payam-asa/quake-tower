@@ -121,6 +121,9 @@ export class Shake {
   }
 }
 
+/** A tower whose live sway ratio reaches this collapses (same line as 0 stars). */
+export const COLLAPSE_R = 6;
+
 /** Stars from sway ratio: R < 2 -> 3, 2-4 -> 2, 4-6 -> 1, > 6 -> 0. */
 export function starsFor(R) {
   if (R < 2) return 3;

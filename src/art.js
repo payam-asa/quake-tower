@@ -92,7 +92,7 @@ export function drawGround(g, groundKey, color, groundY, gx) {
   }
 }
 
-const FLOOR_COLORS = [0xf26b5b, 0xf7b538, 0x4fb3bf, 0x7bc96f, 0xa58ad9];
+export const FLOOR_COLORS = [0xf26b5b, 0xf7b538, 0x4fb3bf, 0x7bc96f, 0xa58ad9];
 
 /**
  * Tower with N floors. offset(i) gives the centre x of level line i (0 = ground).

@@ -140,6 +140,28 @@ export function playWobble() {
   lfo.stop(t + 1);
 }
 
+/** Building collapse: a crunching noise burst over a deep thump. */
+export function playCrash() {
+  if (!ready()) return;
+  const t = ctx.currentTime;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuffer(1.6);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2400, t);
+  filter.frequency.exponentialRampToValueAtTime(90, t + 1.4);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(1.4, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+  src.connect(filter).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + 1.6);
+  tone(70, t, 0.9, { type: 'sine', vol: 0.5, glideTo: 35 });
+  // A few clattering debris hits
+  for (let k = 0; k < 5; k++) tone(180 + k * 55, t + 0.25 + k * 0.11, 0.12, { type: 'square', vol: 0.05 });
+}
+
 export function playResult(stars) {
   if (stars === 3) playChime();
   else if (stars === 0) playWobble();

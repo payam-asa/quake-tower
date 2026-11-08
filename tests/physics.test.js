@@ -42,3 +42,9 @@ test('star thresholds', () => {
   assert.equal(starsFor(5), 1);
   assert.equal(starsFor(7), 0);
 });
+
+test('collapse happens exactly at the 0-star line', async () => {
+  const { COLLAPSE_R, starsFor: sf } = await import('../src/physics.js');
+  assert.equal(sf(COLLAPSE_R), 0);
+  assert.equal(sf(COLLAPSE_R - 0.01), 1);
+});

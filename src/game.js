@@ -1,11 +1,12 @@
-import { Shake, starsFor, messageFor, towerPeriod, envelope, DT, DEFAULT_ZETA } from './physics.js';
+import { Shake, starsFor, messageFor, towerPeriod, envelope, DT, DEFAULT_ZETA, COLLAPSE_R } from './physics.js';
+import { makeCollapse, stepCollapse, drawCollapse } from './collapse.js';
 import {
   LEVELS, makeGround, groundFor, hintDirection, hintText, goalMet, DAMPER_ZETA,
 } from './levels.js';
 import { loadProgress, recordResult, recordTallest } from './progress.js';
 import { W, INK, STAR_ON, FONT, FONT_BOLD, makeButton, makeMuteButton, drawStars, starPoints } from './ui.js';
 import { drawBackdrop, driftClouds, drawGround, drawTower } from './art.js';
-import { unlockAudio, startRumble, setRumble, stopRumble, playResult } from './sound.js';
+import { unlockAudio, startRumble, setRumble, stopRumble, playResult, playCrash } from './sound.js';
 import { showScienceCard } from './sciencecard.js';
 
 const GROUND_Y = 600;          // top of the ground layer
@@ -51,6 +52,7 @@ export class GameScene extends Phaser.Scene {
       cx: L.towers === 1 ? W / 2 - 20 : 85 + i * 155,
       width: L.towers === 1 ? 110 : 92,
       shake: null,
+      collapse: null,
     }));
     this.floorH = Math.min(28, Math.floor((GROUND_Y - TOWER_TOP_LIMIT) / L.maxFloors));
     this.damperOn = false;
@@ -292,7 +294,9 @@ export class GameScene extends Phaser.Scene {
     // Same seed for every tower, so they all feel the same earthquake.
     for (const tw of this.towers) {
       tw.shake = new Shake({ floors: tw.floors, groundPeriod: this.ground.period, zeta: this.zeta, seed });
+      tw.collapse = null;
     }
+    this.endTimer = null;
     this.accum = 0;
     this.peakR = 0;
     this.setState('shaking');
@@ -308,7 +312,8 @@ export class GameScene extends Phaser.Scene {
     const stars = Math.min(...perTower);
     this.worst = this.towers[perTower.indexOf(stars)];
     this.lastR = this.worst.shake.swayRatio;
-    playResult(stars);
+    const anyCollapsed = this.towers.some((tw) => tw.collapse);
+    if (!anyCollapsed) playResult(stars);
     const canNext = stars >= 1 || this.tries >= 3;
     const progress = recordResult(loadProgress(), L.number, stars, canNext);
     const newBest = L.tallest && stars === 3 && recordTallest(progress, this.towers[0].floors);
@@ -318,7 +323,8 @@ export class GameScene extends Phaser.Scene {
     if (L.towers > 1) {
       this.towers.forEach((tw, i) => drawStars(this.starG, tw.cx, 640, perTower[i], 11, 3, 26));
     }
-    this.messageText.setText(newBest ? `New best: ${this.towers[0].floors} floors!` : messageFor(stars));
+    const collapsedMsg = L.towers > 1 ? 'A tower collapsed!' : 'Collapsed!';
+    this.messageText.setText(newBest ? `New best: ${this.towers[0].floors} floors!` : (anyCollapsed ? collapsedMsg : messageFor(stars)));
 
     const lines = [];
     if (L.minStars) lines.push(goalMet(L, stars) ? '✓ Goal reached!' : 'Goal not reached yet.');
@@ -341,13 +347,13 @@ export class GameScene extends Phaser.Scene {
   openScience() {
     if (this.card) return;
     this.card = showScienceCard(this, {
-      ground: this.ground, floors: this.worst.floors, R: this.lastR, zeta: this.zeta,
+      ground: this.ground, floors: this.worst.floors, R: this.lastR, zeta: this.zeta, collapsed: !!this.worst.collapse,
       onClose: () => { this.card = null; },
     });
   }
 
   retry() {
-    for (const tw of this.towers) tw.shake = null;
+    for (const tw of this.towers) { tw.shake = null; tw.collapse = null; }
     this.peakR = 0;
     this.setState('build');
     this.redraw();
@@ -367,6 +373,9 @@ export class GameScene extends Phaser.Scene {
   update(_time, deltaMs) {
     driftClouds(this.backdrop.clouds, deltaMs / 1000);
     const dt = Math.min(deltaMs / 1000, 0.1); // cap so a hidden tab doesn't jump
+    const debris = this.towers.filter((tw) => tw.collapse);
+    for (const tw of debris) stepCollapse(tw.collapse, dt);
+    if (debris.length && this.state !== 'shaking') this.redraw();
 
     if (this.state === 'probing' && this.probe) {
       this.accum += dt;
@@ -387,6 +396,20 @@ export class GameScene extends Phaser.Scene {
     while (this.accum >= DT && !lead.done) {
       for (const tw of this.towers) tw.shake.step();
       this.accum -= DT;
+    }
+    for (const tw of this.towers) {
+      const s = tw.shake;
+      if (!tw.collapse && (Math.abs(s.u) * s.omega ** 2) / s.A >= COLLAPSE_R) this.collapseTower(tw);
+    }
+    // Once every tower is down, end the shake shortly after instead of waiting it out.
+    if (this.endTimer === null && this.towers.every((tw) => tw.collapse)) this.endTimer = 1.8;
+    if (this.endTimer !== null) {
+      this.endTimer -= dt;
+      if (this.endTimer <= 0) {
+        this.finishShake();
+        this.redraw();
+        return;
+      }
     }
     this.peakR = lead.swayRatio;
     const swayNow = Math.max(...this.towers.map((tw) => Math.abs(tw.shake.u) * tw.shake.omega ** 2 / tw.shake.A));
@@ -414,6 +437,10 @@ export class GameScene extends Phaser.Scene {
     this.towerG.clear();
     let liveR = 0;
     for (const tw of this.towers) {
+      if (tw.collapse) {
+        drawCollapse(this.towerG, tw.collapse);
+        continue;
+      }
       const s = shaking ? tw.shake : null;
       const signedR = s ? (s.u * s.omega * s.omega) / s.A : 0;
       liveR = Math.abs(signedR);
@@ -425,6 +452,23 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (this.level.towers === 1) this.drawMeter(liveR, this.peakR);
+  }
+
+  /** The tower fails: freeze its shape, break it into falling floors. */
+  collapseTower(tw) {
+    const s = tw.shake;
+    const src = this.towers[0].shake;
+    const gx = -(src.ag / src.A) * GROUND_PX;
+    const signedR = (s.u * s.omega * s.omega) / s.A;
+    const topSway = Phaser.Math.Clamp(signedR * SWAY_PX, -SWAY_MAX, SWAY_MAX);
+    const cx = tw.cx + gx;
+    tw.collapse = makeCollapse({
+      N: tw.floors, floorH: this.floorH, width: tw.width, groundY: GROUND_Y,
+      offset: (i) => cx + topSway * (i / tw.floors),
+    });
+    playCrash();
+    this.cameras.main.shake(450, 0.012);
+    if (navigator.vibrate) navigator.vibrate([0, 30, 400]);
   }
 
   drawGround(gx, intensity, t) {
